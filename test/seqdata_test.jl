@@ -21,3 +21,6 @@ train, valid, test = SequentialData(A, 24, 64, 0.5, 0.25, verbose=true, supervis
 @assert train[1][1][:,:,1] == A[:,1:64]
 @assert train[1][2][:,:,1] == A[:,2:65]
 @assert train[2][1][:,:,1] == A[:,1+24:24+64]
+
+
+true

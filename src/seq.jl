@@ -165,11 +165,6 @@ function _batch_size(data::AbstractSeqData, i::Int)
         N_batch = data.N_batch
     else
         N_batch = data.N_t - (i-1)*data.N_batch - data.N_length
-        println(typeof(N_batch))
-        println("---")
-        println(N_batch)
-        println("---")
-        println("-",N_batch, "-", data.N_t, "-", data.N_batch, "-", data.N_length, "-", i)
         @assert 1 <= N_batch <= data.N_batch
     end
     return N_batch
