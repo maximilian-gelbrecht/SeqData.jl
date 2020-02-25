@@ -7,6 +7,5 @@ SeqData is a small package that provides a data type for sequential data for lea
 Everything you need to now is in the doc string:
 
 ```@docs
-AbstractSeqData
-SeqData
+SequentialData
 ```
