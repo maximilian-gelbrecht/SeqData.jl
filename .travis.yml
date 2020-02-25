@@ -1,0 +1,12 @@
+language: julia
+os:
+- linux
+julia:
+- 1.3
+notifications:
+  email: true
+
+script:
+- julia --check-bounds=yes --color=yes --inline=no -e "using Pkg; Pkg.test(coverage=true)"
+- julia -e 'using Pkg; Pkg.add("Documenter")' &&
+  julia docs/make.jl
