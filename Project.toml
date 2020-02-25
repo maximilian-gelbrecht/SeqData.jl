@@ -1,0 +1,7 @@
+name = "SeqData"
+uuid = "fa074d72-62c1-4b7f-bbce-533bec7673d9"
+authors = ["max "]
+version = "0.1.0"
+
+[deps]
+Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
