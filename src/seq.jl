@@ -1,6 +1,6 @@
 using Flux
 
-abstract type AbstractSeqData end
+abstract type AbstractSeqData end # make it a subtype of abstractarray?
 
 """
     SequentialData
@@ -9,18 +9,14 @@ Struct with initialization for preparing sequence data for a learning problem. I
 
 `SequentialData` can be used for `for`-loops with `for i in data` and also indexed with data[i]. Each element is a 2-element array containing the input and output for the learning problem.
 
-If more than one trajectory is provided, each trajectory will be divided in train, valid and test sets and these sets will then be combined to form the full train, valid and test sets.
-
 It is possible to output batches of data.
 
 # Fields of the struct
 
-* `data::AbstractArray`: Raw Data as a ``N_dim \\times N_t \\times N_i`` array
+* `data::AbstractArray`: Raw Data as a ``N_dim\\times N_i\\times N_t`` array
 * `N_batch::Int`: Batch Size
 * `N_length::Int`: Length of each sample
 * `N::Int`: Total number of individual train/valid/test data pairs available
-* `N_i::Int`: Number of Input Trajectories
-* `N_tr_i::Int`: Number of individual train/valid/test data pairs available per trajectory
 * `N_t::Int`: Number of time steps per trajectory
 
 # Initialization
@@ -44,16 +40,15 @@ If ``N_i > 1`` all values are refering to each trajectory seperately.
 Returns _three_ instances of `SequentialData` in order `(train_set, valid_set, test_set)`.
 
 """
-struct SequentialData <: AbstractSeqData
-    data::AbstractArray
+struct SequentialData{T} <: AbstractSeqData
+    data::AbstractArray{T,3}
     N_batch::Int
     N_length::Int
     N::Int
-    N_i::Int
-    N_tr_i::Int
     N_t::Int
     _batches::Bool
     _supervised::Bool
+    _2d::Bool
 end
 
 # initializes all data
@@ -68,15 +63,17 @@ function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, 
     N_batch = N_batch == 0 ? 1 : N_batch
     #offset = supervised ? 0 : 1
 
-    # convert data to   N_i x N_t x N_dim
+    # convert data to   N_dim x N_i x N_t
     if ndims(input_data)==2
         N_dim, N_t = size(input_data)
-        input_data = reshape(input_data, (N_dim, N_t, 1))
+        input_data = reshape(input_data, (N_dim, 1, N_t))
         N_i = 1
+        _2d=false
     elseif ndims(input_data)==3
-        N_dim, N_t, N_i = size(input_data)
+        N_dim, N_i, N_t = size(input_data)
+        _2d=true
     else
-        error("input_data has to be 2- or 3-dimensional in (N_dim x N_t x N_i) format")
+        error("input_data has to be 2- or 3-dimensional in (N_dim x N_i x N_t) format")
     end
 
     N_train = Int(ceil(N_t * N_train))
@@ -100,8 +97,9 @@ function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, 
         println("Test set length = ",N_i*N_Ntest)
     end
 
-    SequentialData(input_data[:,1:N_train,:], N_batch, N_length, N_i*N_Ntrain, N_i, N_Ntrain, N_train, _batches, supervised), SequentialData(input_data[:,N_train+1:N_train+N_valid,:], N_batch, N_length, N_i*N_Nvalid, N_i, N_Nvalid, N_valid, _batches, supervised), SequentialData(input_data[:,N_train+N_valid+1:end,:], N_batch, N_length, N_i*N_Ntest, N_i, N_Ntest, N_t - N_train - N_valid, _batches, supervised)
+    SequentialData(input_data[:,:,1:N_train], N_batch, N_length, N_Ntrain, N_train, _batches, supervised, _2d), SequentialData(input_data[:,:,N_train+1:N_train+N_valid], N_batch, N_length, N_Nvalid, N_valid, _batches, supervised, _2d), SequentialData(input_data[:,:,N_train+N_valid+1:end], N_batch, N_length, N_Ntest, N_t - N_train - N_valid, _batches, supervised, _2d)
 end
+
 
 function Base.iterate(iter::AbstractSeqData, state=1)
     if state>iter.N
@@ -114,40 +112,38 @@ end
 Base.length(iter::AbstractSeqData) = iter.N
 Base.eltype(iter::AbstractSeqData) = Array{typeof(iter.data),1}
 
-function Base.getindex(iter::SequentialData, i::Int)
+function Base.getindex(iter::SequentialData{T}, i::Int) where T<:Number
     @assert 1 <= i <= iter.N
 
-    i_tr = Int(ceil(i/iter.N_tr_i)) # which trajectory
-    ii = i - (i_tr - 1)*iter.N_tr_i # where on this trajectory are we?
-    N_batch = _batch_size(iter, ii)
+    N_batch = _batch_size(iter, i)
+
+    dropds = []
+    if iter._batches==false
+        push!(dropds, 4)
+    end
+    if iter._2d==false
+        push!(dropds, 2)
+    end
+    dropds = Tuple(dropds)
 
     if !iter._supervised
-        data = gpu(zeros(eltype(iter.data), size(iter.data,1), iter.N_length, N_batch))
+        data = gpu(zeros(T, size(iter.data,1), size(iter.data, 2), iter.N_length, N_batch))
 
-        for (iib, ib) in enumerate(_batch_iterate_range(iter, ii))
-            data[:,:,iib] = iter.data[:,ib:ib-1+iter.N_length,i_tr]
+        for (iib, ib) in enumerate(_batch_iterate_range(iter, i))
+            data[:,:,:,iib] = iter.data[:,:,ib:ib-1+iter.N_length]
         end
 
-        if iter._batches
-            return data
-        else
-            return data[:,:,1]
-        end
+        return dropdims(data, dims=dropds)
     else
-        data1 = gpu(zeros(eltype(iter.data), size(iter.data,1), iter.N_length, N_batch))
-        data2 = gpu(zeros(eltype(iter.data), size(iter.data,1), iter.N_length, N_batch))
+        data1 = gpu(zeros(T, size(iter.data,1), size(iter.data,2), iter.N_length, N_batch))
+        data2 = gpu(zeros(T, size(iter.data,1), size(iter.data,2), iter.N_length, N_batch))
 
-        for (iib, ib) in enumerate(_batch_iterate_range(iter, ii))
-            data1[:,:,iib] = iter.data[:,ib:ib-1+iter.N_length,i_tr]
-            data2[:,:,iib] = iter.data[:,ib+1:ib+iter.N_length,i_tr]
+        for (iib, ib) in enumerate(_batch_iterate_range(iter, i))
+            data1[:,:,:,iib] = iter.data[:,:,ib:ib-1+iter.N_length]
+            data2[:,:,:,iib] = iter.data[:,:,ib+1:ib+iter.N_length]
         end
 
-        if iter._batches
-            return (data1, data2)
-        else
-            return (data1[:,:,1], data2[:,:,1])
-        end
-
+        return (dropdims(data1, dims=dropds), dropdims(data2, dims=dropds))
     end
 end
 
@@ -160,11 +156,16 @@ Outputs the batch size of the current batch. This is either the regular batch si
 Input `i` is the index on the _current trajectory_.
 """
 function _batch_size(data::AbstractSeqData, i::Int)
-    @assert 1 <= i <= data.N_tr_i
-    if i != data.N_tr_i
+    @assert 1 <= i <= data.N
+    if i != data.N
         N_batch = data.N_batch
     else
         N_batch = data.N_t - (i-1)*data.N_batch - data.N_length
+        #println(data.N_t)
+        #println(data.N_batch)
+        #println(data.N_length)
+        #println(i)
+        #println(N_batch)
         @assert 1 <= N_batch <= data.N_batch
     end
     return N_batch
@@ -178,7 +179,7 @@ Outputs the range over all parts of a batch. This is either the regular batch si
 Input `i` is the index on the _current trajectory_.
 """
 function _batch_iterate_range(data::AbstractSeqData, i::Int)
-    if i != data.N_tr_i # all but the last batch per trajectory
+    if i != data.N# all but the last batch per trajectory
         iterate_range = (data.N_batch*(i-1))+1:i*data.N_batch
     else  # last batch per trajectory might not have N_batch individuals
         iterate_range = (data.N_batch*(i-1))+1:(data.N_t - data.N_length)
