@@ -59,7 +59,8 @@ function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, 
     @assert N_train + N_valid <= 1.
     @assert 0 <= N_batch
 
-    _batches = N_batch == 0 ? false : true
+    _batches = ((N_batch == 0) | (N_batch == 1)) ? false : true
+
     N_batch = N_batch == 0 ? 1 : N_batch
     #offset = supervised ? 0 : 1
 
@@ -124,6 +125,10 @@ function Base.getindex(iter::SequentialData{T}, i::Int) where T<:Number
     if iter._2d==false
         push!(dropds, 2)
     end
+    if iter.N_length == 1
+        push!(dropds, 3)
+    end
+    
     dropds = Tuple(dropds)
 
     if !iter._supervised
