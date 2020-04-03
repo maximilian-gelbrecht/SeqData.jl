@@ -1,4 +1,4 @@
-using Flux
+using Flux, Distributions
 
 abstract type AbstractSeqData end # make it a subtype of abstractarray?
 
@@ -46,13 +46,15 @@ struct SequentialData{T} <: AbstractSeqData
     N_length::Int
     N::Int
     N_t::Int
+    noise_dist::Union{Sampleable, Nothing}
     _batches::Bool
     _supervised::Bool
     _2d::Bool
+    _stabilization_noise::Bool
 end
 
 # initializes all data
-function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, N_train::Real, N_valid::Real; verbose=false, supervised=false)
+function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, N_train::Real, N_valid::Real; verbose=false, supervised=false, stabilization_noise::Union{Sampleable, Nothing}=nothing)
 
     @assert 0. <= N_train <= 1.
     @assert 0. <= N_valid <= 1.
@@ -60,6 +62,7 @@ function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, 
     @assert 0 <= N_batch
 
     _batches = ((N_batch == 0) | (N_batch == 1)) ? false : true
+    _stabilization_noise = (stabilization_noise==nothing) ? false : true
 
     N_batch = N_batch == 0 ? 1 : N_batch
     #offset = supervised ? 0 : 1
@@ -98,7 +101,7 @@ function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, 
         println("Test set length = ",N_i*N_Ntest)
     end
 
-    SequentialData(input_data[:,:,1:N_train], N_batch, N_length, N_Ntrain, N_train, _batches, supervised, _2d), SequentialData(input_data[:,:,N_train+1:N_train+N_valid], N_batch, N_length, N_Nvalid, N_valid, _batches, supervised, _2d), SequentialData(input_data[:,:,N_train+N_valid+1:end], N_batch, N_length, N_Ntest, N_t - N_train - N_valid, _batches, supervised, _2d)
+    SequentialData(input_data[:,:,1:N_train], N_batch, N_length, N_Ntrain, N_train, stabilization_noise, _batches, supervised, _2d, _stabilization_noise), SequentialData(input_data[:,:,N_train+1:N_train+N_valid], N_batch, N_length, N_Nvalid, N_valid,stabilization_noise, _batches, supervised, _2d, _stabilization_noise), SequentialData(input_data[:,:,N_train+N_valid+1:end], N_batch, N_length, N_Ntest, N_t - N_train - N_valid, stabilization_noise, _batches, supervised, _2d, _stabilization_noise)
 end
 
 
@@ -128,7 +131,7 @@ function Base.getindex(iter::SequentialData{T}, i::Int) where T<:Number
     if iter.N_length == 1
         push!(dropds, 3)
     end
-    
+
     dropds = Tuple(dropds)
 
     if !iter._supervised
@@ -138,7 +141,11 @@ function Base.getindex(iter::SequentialData{T}, i::Int) where T<:Number
             data[:,:,:,iib] = iter.data[:,:,ib:ib-1+iter.N_length]
         end
 
-        return dropdims(data, dims=dropds)
+        output_data = dropdims(data, dims=dropds)
+
+        if iter._stabilization_noise
+            output_data += rand(iter.noise_dist, size(output_data)...)
+        end
     else
         data1 = gpu(zeros(T, size(iter.data,1), size(iter.data,2), iter.N_length, N_batch))
         data2 = gpu(zeros(T, size(iter.data,1), size(iter.data,2), iter.N_length, N_batch))
@@ -148,8 +155,14 @@ function Base.getindex(iter::SequentialData{T}, i::Int) where T<:Number
             data2[:,:,:,iib] = iter.data[:,:,ib+1:ib+iter.N_length]
         end
 
-        return (dropdims(data1, dims=dropds), dropdims(data2, dims=dropds))
+        if iter._stabilization_noise
+            data1 += rand(iter.noise_dist, size(data1)...)
+        end
+
+        output_data = (dropdims(data1, dims=dropds), dropdims(data2, dims=dropds))
     end
+
+    return output_data
 end
 
 

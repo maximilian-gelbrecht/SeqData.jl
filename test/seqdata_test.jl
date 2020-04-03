@@ -1,4 +1,4 @@
-using SeqData
+using SeqData, Distributions
 
 
 
@@ -49,6 +49,25 @@ train, valid, test = SequentialData(A, 0, 64, 0.5, 0.25, verbose=true)
 @assert train[1] == A[:,1:64]
 train[end]
 @assert train[2] == A[:,2:65]
+
+
+
+noise = Uniform(0.0, 0.01)
+train, valid, test = SequentialData(A, 0, 1, 0.5, 0.25, verbose=true, supervised=true, stabilization_noise=noise)
+
+for i in 1:length(train)
+    @assert A[:,i] < train[i][1] < (A[:,i] .+ 0.01)
+end
+
+train, valid, test = SequentialData(A, 0, 1, 0.5, 0.25, verbose=true, supervised=false, stabilization_noise=noise)
+
+for i in 1:length(train)
+    @assert A[:,i] < train[i] < (A[:,i] .+ 0.01)
+end
+
+
+
+
 
 
 true
