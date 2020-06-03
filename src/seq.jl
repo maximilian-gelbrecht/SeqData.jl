@@ -54,12 +54,8 @@ struct SequentialData{T} <: AbstractSeqData
 end
 
 # initializes all data
-function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, N_train::Real, N_valid::Real; verbose=false, supervised=false, stabilization_noise::Union{Sampleable, Nothing}=nothing)
+function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, N_train::Real, N_valid::Real; verbose=false, supervised=false, stabilization_noise::Union{Sampleable, Nothing}=nothing, overlap::Bool=true)
 
-    @assert 0. <= N_train <= 1.
-    @assert 0. <= N_valid <= 1.
-    @assert N_train + N_valid <= 1.
-    @assert 0 <= N_batch
 
     _batches = ((N_batch == 0) | (N_batch == 1)) ? false : true
     _stabilization_noise = (stabilization_noise==nothing) ? false : true
@@ -80,12 +76,30 @@ function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, 
         error("input_data has to be 2- or 3-dimensional in (N_dim x N_i x N_t) format")
     end
 
-    N_train = Int(ceil(N_t * N_train))
-    N_valid = Int(ceil(N_t * N_valid))
+    if (0. <= N_train <= 1.)
+        @assert 0. <= N_valid <= 1.
+        @assert N_train + N_valid <= 1.
+        @assert 0 <= N_batch
 
-    N_Ntrain = Int(ceil((N_train - N_length)/N_batch)) #- N_batch ??
-    N_Nvalid = Int(ceil((N_valid - N_length)/N_batch))
-    N_Ntest = Int(ceil(((N_t - N_train - N_valid) - N_length)/N_batch))
+        N_train = Int(ceil(N_t * N_train))
+        N_valid = Int(ceil(N_t * N_valid))
+    else
+        @assert (N_train + N_valid) < N_t
+        N_train = Int(N_train)
+        N_valid = Int(N_valid)
+    end
+
+    if overlap
+        N_Ntrain = Int(ceil((N_train)/N_batch)) #- N_batch ??
+        N_Nvalid = Int(ceil((N_valid)/N_batch))
+        N_Ntest = Int(ceil(((N_t - N_train - N_valid))/N_batch))
+        overlap_N = N_length
+    else
+        N_Ntrain = Int(ceil((N_train - N_length)/N_batch)) #- N_batch ??
+        N_Nvalid = Int(ceil((N_valid - N_length)/N_batch))
+        N_Ntest = Int(ceil(((N_t - N_train - N_valid) - N_length)/N_batch))
+        overlap_N = 0
+    end
 
     if (N_valid - N_length) < 0
         @warn "Valid set may be empty"
@@ -101,7 +115,7 @@ function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, 
         println("Test set length = ",N_i*N_Ntest)
     end
 
-    SequentialData(input_data[:,:,1:N_train], N_batch, N_length, N_Ntrain, N_train, stabilization_noise, _batches, supervised, _2d, _stabilization_noise), SequentialData(input_data[:,:,N_train+1:N_train+N_valid], N_batch, N_length, N_Nvalid, N_valid,stabilization_noise, _batches, supervised, _2d, _stabilization_noise), SequentialData(input_data[:,:,N_train+N_valid+1:end], N_batch, N_length, N_Ntest, N_t - N_train - N_valid, stabilization_noise, _batches, supervised, _2d, _stabilization_noise)
+    SequentialData(input_data[:,:,1:N_train+overlap_N], N_batch, N_length, N_Ntrain, N_train+overlap_N, stabilization_noise, _batches, supervised, _2d, _stabilization_noise), SequentialData(input_data[:,:,N_train+1:N_train+N_valid+overlap_N], N_batch, N_length, N_Nvalid, N_valid+overlap_N,stabilization_noise, _batches, supervised, _2d, _stabilization_noise), SequentialData(input_data[:,:,N_train+N_valid+1:end], N_batch, N_length, N_Ntest, N_t - N_train - N_valid, stabilization_noise, _batches, supervised, _2d, _stabilization_noise)
 end
 
 

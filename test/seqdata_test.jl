@@ -66,6 +66,20 @@ for i in 1:length(train)
 end
 
 
+train, valid, test = SequentialData(A, 0, 1, 100, 200, verbose=true, supervised=true)
+
+@assert length(train) == 100
+@assert length(valid) == 200
+@assert length(test) == 100
+
+@assert train[end][2] == valid[1][1]
+
+train, valid, test = SequentialData(A, 0, 1, 100, 200, verbose=true, supervised=true, overlap=false)
+
+@assert train[end][2] != valid[1][1]
+@assert train[end][2] == A[:,100]
+@assert valid[1][1] == A[:,101]
+
 
 
 
