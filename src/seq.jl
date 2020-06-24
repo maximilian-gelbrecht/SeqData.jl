@@ -220,24 +220,3 @@ end
 
 Base.firstindex(iter::AbstractSeqData) = 1
 Base.lastindex(iter::AbstractSeqData) = iter.N
-
-"""
-    time_index(data::AbstractSeqData, i::Int)
-
-Given an instance of the train, valid or predict set, returns the time step of the forecasted value, so the last value of the output of the model and the index of the trajetory the time step is from (in case only one trajectory is used as input data this is always 1.)
-
-"""
-function time_index(data::AbstractSeqData, i::Int)
-    @assert 1 <= i <= data.N
-
-    i_tr = Int(ceil(i/data.N_tr_i)) # which trajectory
-
-    ii = i - (i_tr - 1)*data.N_tr_i # where on this trajectory are we?
-
-    N_batch = _batch_size(data, ii)
-    indices = zeros(Int, (N_batch, 2))
-    indices[:,1] .= i_tr
-    indices[:,2] = collect(_batch_iterate_range(data, ii)) .+ (data.N_length+data.offset-1-data.hybrid_offset)
-
-    return indices
-end
