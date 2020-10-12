@@ -1,6 +1,6 @@
 using Flux, Distributions
 
-abstract type AbstractSeqData end # make it a subtype of abstractarray?
+abstract type AbstractSeqData{T} end # make it a subtype of abstractarray?
 
 """
     SequentialData
@@ -40,7 +40,7 @@ If ``N_i > 1`` all values are refering to each trajectory seperately.
 Returns _three_ instances of `SequentialData` in order `(train_set, valid_set, test_set)`.
 
 """
-struct SequentialData{T} <: AbstractSeqData
+struct SequentialData{T} <: AbstractSeqData{T}
     data::AbstractArray{T,3}
     N_batch::Int
     N_length::Int

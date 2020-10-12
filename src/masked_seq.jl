@@ -12,7 +12,7 @@ Struct with initialization for preparing sequence data for a learning problem. S
 `mask_in` has to be an array that can index the underlying array of `data` via `getindex(data.data, mask_in...)`. Eg. `[1:10, :]` is possible for 2D data. If an unsupervised problem is desired `mask_out` can be left `nothing`, only `mask_in` will be used.
 
 """
-struct MaskedSequentialData{T} <: AbstractSeqData
+struct MaskedSequentialData{T} <: AbstractSeqData{T}
     data::SequentialData{T}
     mask_in
     fill_in
