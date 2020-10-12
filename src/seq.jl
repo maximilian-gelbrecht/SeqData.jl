@@ -51,10 +51,11 @@ struct SequentialData{T} <: AbstractSeqData{T}
     _supervised::Bool
     _2d::Bool
     _stabilization_noise::Bool
+    _GPU::Bool
 end
 
 # initializes all data
-function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, N_train::Real, N_valid::Real; verbose=false, supervised=false, stabilization_noise::Union{Sampleable, Nothing}=nothing, overlap::Bool=true)
+function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, N_train::Real, N_valid::Real; verbose=false, supervised=false, stabilization_noise::Union{Sampleable, Nothing}=nothing, overlap::Bool=true, GPU::Bool=true)
 
 
     _batches = ((N_batch == 0) | (N_batch == 1)) ? false : true
@@ -115,7 +116,7 @@ function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, 
         println("Test set length = ",N_i*N_Ntest)
     end
 
-    SequentialData(input_data[:,:,1:N_train+overlap_N], N_batch, N_length, N_Ntrain, N_train+overlap_N, stabilization_noise, _batches, supervised, _2d, _stabilization_noise), SequentialData(input_data[:,:,N_train+1:N_train+N_valid+overlap_N], N_batch, N_length, N_Nvalid, N_valid+overlap_N,stabilization_noise, _batches, supervised, _2d, _stabilization_noise), SequentialData(input_data[:,:,N_train+N_valid+1:end], N_batch, N_length, N_Ntest, N_t - N_train - N_valid, stabilization_noise, _batches, supervised, _2d, _stabilization_noise)
+    SequentialData(input_data[:,:,1:N_train+overlap_N], N_batch, N_length, N_Ntrain, N_train+overlap_N, stabilization_noise, _batches, supervised, _2d, _stabilization_noise, GPU), SequentialData(input_data[:,:,N_train+1:N_train+N_valid+overlap_N], N_batch, N_length, N_Nvalid, N_valid+overlap_N,stabilization_noise, _batches, supervised, _2d, _stabilization_noise, GPU), SequentialData(input_data[:,:,N_train+N_valid+1:end], N_batch, N_length, N_Ntest, N_t - N_train - N_valid, stabilization_noise, _batches, supervised, _2d, _stabilization_noise, GPU)
 end
 
 
@@ -149,8 +150,12 @@ function Base.getindex(iter::SequentialData{T}, i::Int) where T<:Number
     dropds = Tuple(dropds)
 
     if !iter._supervised
-        data = gpu(zeros(T, size(iter.data,1), size(iter.data, 2), iter.N_length, N_batch))
+        data = zeros(T, size(iter.data,1), size(iter.data, 2), iter.N_length, N_batch)
 
+         if iter._GPU
+            data = gpu(data)
+        end 
+        
         for (iib, ib) in enumerate(_batch_iterate_range(iter, i))
             data[:,:,:,iib] = iter.data[:,:,ib:ib-1+iter.N_length]
         end
@@ -161,9 +166,14 @@ function Base.getindex(iter::SequentialData{T}, i::Int) where T<:Number
             output_data += rand(iter.noise_dist, size(output_data)...)
         end
     else
-        data1 = gpu(zeros(T, size(iter.data,1), size(iter.data,2), iter.N_length, N_batch))
-        data2 = gpu(zeros(T, size(iter.data,1), size(iter.data,2), iter.N_length, N_batch))
+        data1 = zeros(T, size(iter.data,1), size(iter.data,2), iter.N_length, N_batch)
+        data2 = zeros(T, size(iter.data,1), size(iter.data,2), iter.N_length, N_batch)
 
+        if iter._GPU
+            data1 = gpu(data1)
+            data2 = gpu(data2)
+        end 
+        
         for (iib, ib) in enumerate(_batch_iterate_range(iter, i))
             data1[:,:,:,iib] = iter.data[:,:,ib:ib-1+iter.N_length]
             data2[:,:,:,iib] = iter.data[:,:,ib+1:ib+iter.N_length]
@@ -193,11 +203,6 @@ function _batch_size(data::AbstractSeqData, i::Int)
         N_batch = data.N_batch
     else
         N_batch = data.N_t - (i-1)*data.N_batch - data.N_length
-        #println(data.N_t)
-        #println(data.N_batch)
-        #println(data.N_length)
-        #println(i)
-        #println(N_batch)
         @assert 1 <= N_batch <= data.N_batch
     end
     return N_batch
