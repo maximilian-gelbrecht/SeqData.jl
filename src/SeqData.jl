@@ -4,6 +4,6 @@ include("seq.jl")
 include("masked_seq.jl")
 include("joinedseqs.jl")
 
-export SequentialData, AbstractSeqData, MaskedSequentialData, JoinedSeqData
+export SequentialData, AbstractSeqData, MaskedSequentialData, JoinedSeqData, cat
 
 end # module
