@@ -7,7 +7,7 @@ struct JoinedSeqData{T} <: AbstractSeqData{T}
     cumN
 end
 
-Base.length(j::JoinedSeqData) = N
+Base.length(j::JoinedSeqData) = j.N
 Base.eltype(j::JoinedSeqData{T}) where T<:Number = T
 
 function Base.getindex(iter::JoinedSeqData, i::Int)
