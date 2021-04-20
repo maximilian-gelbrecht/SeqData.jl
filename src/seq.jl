@@ -13,7 +13,7 @@ It is possible to output batches of data.
 
 # Fields of the struct
 
-* `data::AbstractArray`: Raw Data as a ``N_dim\\times N_i\\times N_t`` array
+* `data::AbstractArray`: Raw Data
 * `N_batch::Int`: Batch Size
 * `N_length::Int`: Length of each sample
 * `N::Int`: Total number of individual train/valid/test data pairs available
@@ -25,7 +25,7 @@ It is possible to output batches of data.
 
 ## Input
 
-* `input_data::AbstractArray`: Raw data in either a ``N_dim \\times N_t \\times N_i`` or ``N_dim \\times N_t`` array
+* `input_data::AbstractArray`: Raw data in either a ``N_dim \\times N_t``, ``N_x \\times N_y \\times N_t`` or ``N_x \\times N_y \\times N_z \\times N_t``
 * `N_batch::Int`: Batch size, If `N_batch==0` the output will be 2D without any batching
 * `N_length::Int`: Length of each sample
 * `N_train::Real`: Relative Number of input samples for training
@@ -33,23 +33,21 @@ It is possible to output batches of data.
 * `supervised::Bool`: If true every indexing will return a pair of arrays where the second array is shifted by 1 from the first array.
 
 
-If ``N_i > 1`` all values are refering to each trajectory seperately.
-
 ## Output
 
 Returns _three_ instances of `SequentialData` in order `(train_set, valid_set, test_set)`.
 
 """
 struct SequentialData{T} <: AbstractSeqData{T}
-    data::AbstractArray{T,3}
+    data::AbstractArray{T}
     N_batch::Int
     N_length::Int
     N::Int
     N_t::Int
+    N_dims::Int
     noise_dist::Union{Sampleable, Nothing}
     _batches::Bool
     _supervised::Bool
-    _2d::Bool
     _stabilization_noise::Bool
     _GPU::Bool
 end
@@ -63,19 +61,22 @@ function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, 
 
     N_batch = N_batch == 0 ? 1 : N_batch
     #offset = supervised ? 0 : 1
-
     # convert data to   N_dim x N_i x N_t
-    if ndims(input_data)==2
-        N_dim, N_t = size(input_data)
-        input_data = reshape(input_data, (N_dim, 1, N_t))
-        N_i = 1
-        _2d=false
-    elseif ndims(input_data)==3
-        N_dim, N_i, N_t = size(input_data)
-        _2d=true
+    N_dims = ndims(input_data)
+    if N_dims==2
+        N_x, N_t = size(input_data)
+        N_y = 1
+        N_z = 1
+    elseif N_dims==3
+        N_x, N_y, N_t = size(input_data)
+        N_z = 1
+    elseif N_dims==4
+        N_x, N_y, N_z, N_t = size(input_data)
     else
-        error("input_data has to be 2- or 3-dimensional in (N_dim x N_i x N_t) format")
+        error("input_data has to be 2- or 3 or 4-dimensional in (N_x x N_y x N_z x N_t) format")
     end
+    input_data = reshape(input_data, (N_x, N_y, N_z, N_t))
+
 
     if (0. <= N_train <= 1.)
         @assert 0. <= N_valid <= 1.
@@ -111,12 +112,12 @@ function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, 
     end
 
     if verbose
-        println("Train set length = ",N_i*N_Ntrain)
-        println("Valid set length = ",N_i*N_Nvalid)
-        println("Test set length = ",N_i*N_Ntest)
+        println("Train set length = ",N_Ntrain)
+        println("Valid set length = ",N_Nvalid)
+        println("Test set length = ",N_Ntest)
     end
 
-    SequentialData(input_data[:,:,1:N_train+overlap_N], N_batch, N_length, N_Ntrain, N_train+overlap_N, stabilization_noise, _batches, supervised, _2d, _stabilization_noise, GPU), SequentialData(input_data[:,:,N_train+1:N_train+N_valid+overlap_N], N_batch, N_length, N_Nvalid, N_valid+overlap_N,stabilization_noise, _batches, supervised, _2d, _stabilization_noise, GPU), SequentialData(input_data[:,:,N_train+N_valid+1:end], N_batch, N_length, N_Ntest, N_t - N_train - N_valid, stabilization_noise, _batches, supervised, _2d, _stabilization_noise, GPU)
+    SequentialData(input_data[:,:,:,1:N_train+overlap_N], N_batch, N_length, N_Ntrain, N_train+overlap_N, N_dims, stabilization_noise, _batches, supervised, _stabilization_noise, GPU), SequentialData(input_data[:,:,:,N_train+1:N_train+N_valid+overlap_N], N_batch, N_length, N_Nvalid, N_valid+overlap_N, N_dims, stabilization_noise, _batches, supervised, _stabilization_noise, GPU), SequentialData(input_data[:,:,:,N_train+N_valid+1:end], N_batch, N_length, N_Ntest, N_t - N_train - N_valid, N_dims, stabilization_noise, _batches, supervised, _stabilization_noise, GPU)
 end
 
 
@@ -138,26 +139,32 @@ function Base.getindex(iter::SequentialData{T}, i::Int) where T<:Number
 
     dropds = []
     if iter._batches==false
-        push!(dropds, 4)
+        push!(dropds, 5)
     end
-    if iter._2d==false
+
+    # do something with N here
+    if iter.N_dims==2
         push!(dropds, 2)
-    end
-    if iter.N_length == 1
         push!(dropds, 3)
+    elseif iter.N_dims==3
+        push!(dropds, 3)
+    end
+
+    if iter.N_length == 1
+        push!(dropds, 4)
     end
 
     dropds = Tuple(dropds)
 
     if !iter._supervised
-        data = zeros(T, size(iter.data,1), size(iter.data, 2), iter.N_length, N_batch)
+        data = zeros(T, size(iter.data,1), size(iter.data, 2), size(iter.data,3), iter.N_length, N_batch)
 
          if iter._GPU
             data = gpu(data)
-        end 
-        
+        end
+
         for (iib, ib) in enumerate(_batch_iterate_range(iter, i))
-            data[:,:,:,iib] = iter.data[:,:,ib:ib-1+iter.N_length]
+            data[:,:,:,:,iib] = iter.data[:,:,:,ib:ib-1+iter.N_length]
         end
 
         output_data = dropdims(data, dims=dropds)
@@ -166,17 +173,17 @@ function Base.getindex(iter::SequentialData{T}, i::Int) where T<:Number
             output_data += rand(iter.noise_dist, size(output_data)...)
         end
     else
-        data1 = zeros(T, size(iter.data,1), size(iter.data,2), iter.N_length, N_batch)
-        data2 = zeros(T, size(iter.data,1), size(iter.data,2), iter.N_length, N_batch)
+        data1 = zeros(T, size(iter.data,1), size(iter.data,2), size(iter.data,3), iter.N_length, N_batch)
+        data2 = zeros(T, size(iter.data,1), size(iter.data,2), size(iter.data,3), iter.N_length, N_batch)
 
         if iter._GPU
             data1 = gpu(data1)
             data2 = gpu(data2)
-        end 
-        
+        end
+
         for (iib, ib) in enumerate(_batch_iterate_range(iter, i))
-            data1[:,:,:,iib] = iter.data[:,:,ib:ib-1+iter.N_length]
-            data2[:,:,:,iib] = iter.data[:,:,ib+1:ib+iter.N_length]
+            data1[:,:,:,:,iib] = iter.data[:,:,:,ib:ib-1+iter.N_length]
+            data2[:,:,:,:,iib] = iter.data[:,:,:,ib+1:ib+iter.N_length]
         end
 
         if iter._stabilization_noise

@@ -83,5 +83,12 @@ train, valid, test = SequentialData(A, 0, 1, 100, 200, verbose=true, supervised=
 
 
 
+C = rand(10,10,10,400)
+
+train, valid, test = SequentialData(C, 0 , 1, 0.5, 0.25, verbose=true, supervised=true)
+
+@assert train[1][1] == C[:,:,:,1]
+@assert train[1][2] == C[:,:,:,2]
+@assert train[2][1] == C[:,:,:,2]
 
 true
