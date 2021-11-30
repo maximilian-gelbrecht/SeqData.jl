@@ -1,6 +1,6 @@
 using Flux, Distributions
 
-abstract type AbstractSeqData{T} end # make it a subtype of abstractarray?
+abstract type AbstractSeqData{T,N} end # make it a subtype of abstractarray?
 
 """
     SequentialData
@@ -38,8 +38,8 @@ It is possible to output batches of data.
 Returns _three_ instances of `SequentialData` in order `(train_set, valid_set, test_set)`.
 
 """
-struct SequentialData{T} <: AbstractSeqData{T}
-    data::AbstractArray{T}
+struct SequentialData{T,N} <: AbstractSeqData{T,N}
+    data::AbstractArray{T,N}
     N_batch::Int
     N_length::Int
     N::Int
@@ -66,7 +66,7 @@ function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, 
     if N_dims==2
         N_x, N_t = size(input_data)
         N_y = 1
-        N_z = 1
+        N_z = 1s
     elseif N_dims==3
         N_x, N_y, N_t = size(input_data)
         N_z = 1
@@ -75,6 +75,8 @@ function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, 
     else
         error("input_data has to be 2- or 3 or 4-dimensional in (N_x x N_y x N_z x N_t) format")
     end
+
+
     input_data = reshape(input_data, (N_x, N_y, N_z, N_t))
 
 
@@ -159,8 +161,8 @@ function Base.getindex(iter::SequentialData{T}, i::Int) where T<:Number
     if !iter._supervised
         data = zeros(T, size(iter.data,1), size(iter.data, 2), size(iter.data,3), iter.N_length, N_batch)
 
-         if iter._GPU
-            data = gpu(data)
+        if iter._GPU
+            data = CuArray(data)
         end
 
         for (iib, ib) in enumerate(_batch_iterate_range(iter, i))
@@ -177,8 +179,8 @@ function Base.getindex(iter::SequentialData{T}, i::Int) where T<:Number
         data2 = zeros(T, size(iter.data,1), size(iter.data,2), size(iter.data,3), iter.N_length, N_batch)
 
         if iter._GPU
-            data1 = gpu(data1)
-            data2 = gpu(data2)
+            data1 = CuArray(data1)
+            data2 = CuArray(data2)
         end
 
         for (iib, ib) in enumerate(_batch_iterate_range(iter, i))
