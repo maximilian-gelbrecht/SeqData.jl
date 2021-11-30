@@ -1,14 +1,14 @@
 import Base.cat
 
 
-struct JoinedSeqData{T} <: AbstractSeqData{T}
-    data::Array{SequentialData{T},1}
+struct JoinedSeqData{T,S} <: AbstractSeqData{T,S}
+    data::Array{SequentialData{T,S},1}
     N
     cumN
 end
 
 Base.length(j::JoinedSeqData) = j.N
-Base.eltype(j::JoinedSeqData{T}) where T<:Number = T
+Base.eltype(j::JoinedSeqData{T,S}) where {T,S} = T
 
 function Base.getindex(iter::JoinedSeqData, i::Int)
     @assert 1 <= i <= iter.N

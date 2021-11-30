@@ -66,7 +66,7 @@ function SequentialData(input_data::AbstractArray, N_batch::Int, N_length::Int, 
     if N_dims==2
         N_x, N_t = size(input_data)
         N_y = 1
-        N_z = 1s
+        N_z = 1
     elseif N_dims==3
         N_x, N_y, N_t = size(input_data)
         N_z = 1
@@ -162,7 +162,7 @@ function Base.getindex(iter::SequentialData{T}, i::Int) where T<:Number
         data = zeros(T, size(iter.data,1), size(iter.data, 2), size(iter.data,3), iter.N_length, N_batch)
 
         if iter._GPU
-            data = CuArray(data)
+            data = togpu(data)
         end
 
         for (iib, ib) in enumerate(_batch_iterate_range(iter, i))
@@ -179,8 +179,8 @@ function Base.getindex(iter::SequentialData{T}, i::Int) where T<:Number
         data2 = zeros(T, size(iter.data,1), size(iter.data,2), size(iter.data,3), iter.N_length, N_batch)
 
         if iter._GPU
-            data1 = CuArray(data1)
-            data2 = CuArray(data2)
+            data1 = togpu(data1)
+            data2 = togpu(data2)
         end
 
         for (iib, ib) in enumerate(_batch_iterate_range(iter, i))
